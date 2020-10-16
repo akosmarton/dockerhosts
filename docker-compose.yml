@@ -1,0 +1,8 @@
+version: '2'
+
+services:
+  app:
+    image: makos/dockerhosts
+    volumes:
+        - /etc/hosts:/data/hosts
+        - /var/run/docker.sock:/data/docker.sock
