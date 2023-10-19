@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
-	"go.uber.org/zap"
 )
 
 type hostEntry struct {
@@ -31,42 +31,22 @@ var domain string
 
 func main() {
 	var err error
-	var log *zap.Logger
 
 	ctx := context.Background()
-
-	debug := os.Getenv("DEBUG")
-
+	docker_host := os.Getenv("DOCKER_HOST")
 	domain = os.Getenv("DOMAIN")
 	if domain == "" {
 		domain = "docker"
 	}
-
 	filename := os.Getenv("HOSTS_FILE")
 	if filename == "" {
 		filename = "/etc/hosts"
 	}
 
-	if debug == "" {
-		if l, err := zap.NewProduction(); err != nil {
-			panic(err)
-		} else {
-			log = l
-		}
-	} else {
-		if l, err := zap.NewDevelopment(); err != nil {
-			panic(err)
-		} else {
-			log = l
-		}
-	}
-
-	log.Info("env", zap.String("debug", debug), zap.String("DOCKER_HOST", os.Getenv("DOCKER_HOST")), zap.String("DOMAIN", domain), zap.String("FILENAME", filename))
-
-	client, err := client.NewEnvClient()
+	slog.Info("env", "DOCKER_HOST", docker_host, "DOMAIN", domain, "HOSTS_FILE", filename)
+	client, err := client.NewClientWithOpts(client.WithAPIVersionNegotiation(), client.WithHost(docker_host))
 	if err != nil {
-		log.Fatal(err.Error())
-		return
+		panic(err)
 	}
 
 	hosts := hostsFile{
@@ -79,12 +59,10 @@ func main() {
 
 	entries, err := getEntris(ctx, client)
 	if err != nil {
-		log.Fatal(err.Error())
-		return
+		panic(err)
 	}
 	if err := hosts.update(entries); err != nil {
-		log.Fatal(err.Error())
-		return
+		panic(err)
 	}
 
 	for {
@@ -93,17 +71,14 @@ func main() {
 			if msg.Type == "network" && (msg.Action == "connect" || msg.Action == "disconnect") {
 				entries, err := getEntris(ctx, client)
 				if err != nil {
-					log.Fatal(err.Error())
-					return
+					panic(err)
 				}
 				if err := hosts.update(entries); err != nil {
-					log.Fatal(err.Error())
-					return
+					panic(err)
 				}
 			}
 		case err := <-errs:
-			log.Fatal(err.Error())
-			return
+			panic(err)
 		default:
 			time.Sleep(1000 * time.Millisecond)
 		}
@@ -161,18 +136,17 @@ func (h *hostsFile) update(entries []hostEntry) error {
 
 func getEntris(ctx context.Context, client *client.Client) ([]hostEntry, error) {
 	entries := make([]hostEntry, 0)
-
 	networks, err := client.NetworkList(ctx, types.NetworkListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	for _, n := range networks {
-		network, err := client.NetworkInspect(ctx, n.ID)
+		network, err := client.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{Verbose: true})
 		if err != nil {
 			return nil, err
 		}
 		for _, container := range network.Containers {
-			ip := container.IPv4Address[:strings.Index(container.IPv4Address, "/")]
+			ip := container.IPv4Address
 			if ip == "" {
 				continue
 			}
