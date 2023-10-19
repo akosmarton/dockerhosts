@@ -141,12 +141,12 @@ func getEntris(ctx context.Context, client *client.Client) ([]hostEntry, error) 
 		return nil, err
 	}
 	for _, n := range networks {
-		network, err := client.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{Verbose: true})
+		network, err := client.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{})
 		if err != nil {
 			return nil, err
 		}
 		for _, container := range network.Containers {
-			ip := container.IPv4Address
+			ip := container.IPv4Address[:strings.Index(container.IPv4Address, "/")]
 			if ip == "" {
 				continue
 			}
