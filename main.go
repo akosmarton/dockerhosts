@@ -107,6 +107,7 @@ func (h *hostsFile) update(entries []hostEntry) error {
 
 	for _, entry := range entries {
 		lines = append(lines, fmt.Sprintf("%s %s.%s %s", entry.IPAddress, entry.Hostname, entry.Domain, COMMENT))
+		slog.Info("update", "ip", entry.IPAddress, "hostname", entry.Hostname, "domain", entry.Domain)
 	}
 
 	if _, err := f.Seek(0, 0); err != nil {
